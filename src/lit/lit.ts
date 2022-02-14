@@ -11,9 +11,7 @@ interface Spec {
 	decl:Type
 }
 
-export const lit = {toStr, zero, make}
-
-function toStr(v:Val, json?:boolean):string {
+export const litStr = (v:Val, json?:boolean):string => {
 	let q = json ? '"' : '\''
 	if (typeof v === "string")
 		return quote(v, q)
@@ -27,7 +25,7 @@ function toStr(v:Val, json?:boolean):string {
 		let arr = v as List
 		arr.forEach(e => {
 			if (r.length > 1) r += sep
-			r += toStr(e, json)
+			r += litStr(e, json)
 		})
 		r += ']'
 		return r
@@ -51,7 +49,7 @@ function toStr(v:Val, json?:boolean):string {
 			} else {
 				r += k
 			}
-			r += ':'+ toStr(obj[k], json)
+			r += ':'+ litStr(obj[k], json)
 		})
 		r += '}'
 		return r
@@ -59,12 +57,9 @@ function toStr(v:Val, json?:boolean):string {
 	throw new Error("lit toString unknown literal "+ JSON.stringify(v))
 }
 
-function zero(v:Val):boolean {
-	if (Array.isArray(v)) return !v.length
-	return !v || v == typ.void
-}
+export const zero = (v:Val):boolean => Array.isArray(v) ? !v.length : (!v || v == typ.void)
 
-function make(t:Type):Val {
+export const make = (t:Type):Val => {
 	let k = t.kind&knd.all
 	let val:Val
 	if (k&knd.none) val = null

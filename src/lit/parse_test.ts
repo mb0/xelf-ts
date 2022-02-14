@@ -1,5 +1,5 @@
 import {scan} from '../ast'
-import {Val, lit} from './lit'
+import {Val, litStr} from './lit'
 import {parse} from './parse'
 
 let tests:[Val, string, string, string][] = [
@@ -30,8 +30,8 @@ let tests:[Val, string, string, string][] = [
 test.each(tests)('parse lit %s %s', (want, str, out, jsn) => {
 	let got = parse(scan(str))
 	expect(got).toEqual(want)
-	let jgot = lit.toStr(got, true)
+	let jgot = litStr(got, true)
 	expect(jgot).toEqual(jsn || str)
-	let xgot = lit.toStr(got)
+	let xgot = litStr(got)
 	expect(xgot).toEqual(out || str)
 })
