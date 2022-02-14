@@ -4,12 +4,18 @@ import {Type, Param, equalBody} from './typ'
 import {altRestrict} from './alt'
 import {select} from './sel'
 
-export class Ctx {
-	maxid:number = 0
+interface Reg {
+	refType(ref:string):Type|null
+}
+
+export class Sys {
+	maxid = 0
 	map = new Map<number,Type>()
-	named = new Map<string,number>()
-	tmp:boolean = false
-	constructor() {}
+	reg?:Reg
+	tmp = false
+	constructor(reg?:Reg) {
+		this.reg = reg
+	}
 	// IDs are used for type variables, schema types and usually undetermined types, that
 	// correspond to a source position. Bound types may change in-place but the type
 	// identity stays the same. Once bound even the id may change returning the changed
@@ -19,15 +25,13 @@ export class Ctx {
 	bind(t:Type):Type {
 		if (t.id<=0) t = typ.make(t.kind, t.body, ++this.maxid)
 		this.map.set(t.id, t)
-		if (t.body && 'name' in t.body && t.body.name)
-			this.named.set(t.body.name, t.id)
 		return t
 	}
 	get(id:number):Type {
 		return id && this.map.get(id) || typ.void
 	}
-	ref(ref:string):Type {
-		return this.get(this.named.get(ref) || 0)
+	ref(ref:string):Type|null {
+		return this.reg ? this.reg.refType(ref) : null
 	}
 	apply(r:Type):Type {
 		return clone(r, [], (t:Type, _:Stack):Type => t.kind&knd.var ? this.get(t.id) : t)
@@ -42,12 +46,9 @@ export class Ctx {
 		let r = unify(this, a, b)
 		return update(this, t, h, r)
 	}
-	//restrict(t:Type, h:Type):Type {
-	//	return restrict(this, t, h)
-	//}
 }
 
-function update(ctx:Ctx, t:Type, h:Type, r:Type):Type {
+function update(ctx:Sys, t:Type, h:Type, r:Type):Type {
 	r.id = r.id || t.id || h.id
 	if (r.id) ctx.map.set(r.id, r)
 	if (t.kind&knd.var) ctx.map.set(t.id, r)
@@ -59,7 +60,7 @@ function update(ctx:Ctx, t:Type, h:Type, r:Type):Type {
 // whenever a type var is encountered it will be unified with the corresponding type
 // if both are type vars the first will point to the second and their constraints are unified
 // incompatible types do not create an alternative but instead throw an exception.
-function unify(ctx:Ctx, t:Type, h:Type):Type {
+function unify(ctx:Sys, t:Type, h:Type):Type {
 	// update both types from context
 	// if a or hint is void return a
 	let a = typ.base(t), b = typ.base(h)
@@ -141,7 +142,7 @@ function clone(r:Type, stack:Stack, edit?:Editor):Type {
 	return t
 }
 
-function inst(c:Ctx, m:Map<number,Type>):Editor {
+function inst(c:Sys, m:Map<number,Type>):Editor {
 	let edit = (t:Type, s:Stack):Type => {
 		let id = t.id
 		if (id>0) {
@@ -157,6 +158,7 @@ function inst(c:Ctx, m:Map<number,Type>):Editor {
 		if (!b) return t
 		if ('ref' in b) {
 			let x = c.ref(b.ref)
+			if (!x) throw new Error("no type for ref "+ b.ref)
 			return t.kind&knd.none ? typ.opt(x) : typ.deopt(x)
 		}
 		if ('path' in b) {

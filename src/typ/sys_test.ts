@@ -3,10 +3,10 @@ import {scan} from '../ast'
 import {Type} from './typ'
 import {parseType} from './parse'
 import {typ} from './pre'
-import {Ctx} from './ctx'
+import {Sys} from './sys'
 
 test("context basics", () => {
-	let f = typ.func(
+	const f = typ.func(
 		{typ: typ.func(
 			{typ: typ.var(1)},
 			{typ: typ.bool},
@@ -16,40 +16,40 @@ test("context basics", () => {
 	)
 	expect(typ.toStr(f)).toEqual("<func <func @1 bool> list|@1 list|@1>")
 
-	let c = new Ctx()
+	const sys = new Sys()
 
-	let v = c.bind(typ.var(0))
+	const v = sys.bind(typ.var(0))
 	expect(v).toEqual(typ.var(1))
-	expect(c.get(1)).toEqual(typ.var(1))
+	expect(sys.get(1)).toEqual(typ.var(1))
 	v.kind = knd.num
-	c.bind(v)
+	sys.bind(v)
 	v.kind = knd.int
-	expect(c.get(1)).toBe(v)
+	expect(sys.get(1)).toBe(v)
 
-	let fi = c.inst(f)
+	const fi = sys.inst(f)
 	expect(typ.toStr(fi)).toEqual("<func <func @2 bool> list|@2 list|@2>")
-	c.bind(typ.var(2, typ.int))
-	let fa = c.apply(fi)
+	sys.bind(typ.var(2, typ.int))
+	const fa = sys.apply(fi)
 	expect(typ.toStr(fa)).toEqual("<func <func int@2 bool> list|int@2 list|int@2>")
 })
 
-let sel1b = {name:'', params:[{name:'name', typ: typ.str}]}
-let sel1 = typ.make(knd.rec, sel1b)
+const sel1b = {name:'', params:[{name:'name', typ: typ.str}]}
+const sel1 = typ.make(knd.rec, sel1b)
 sel1b.params.push({name:'parent', typ:typ.opt(sel1)})
 
-let sel2b = {name:'', params:[{name:'name', typ: typ.str}]}
-let sel2 = typ.make(knd.rec|knd.none, sel2b)
+const sel2b = {name:'', params:[{name:'name', typ: typ.str}]}
+const sel2 = typ.make(knd.rec|knd.none, sel2b)
 sel2b.params.push({name:'parent', typ:sel2})
 
-let sel3b = {name:'', params:[{name:'name', typ: typ.str}]}
-let sel3 = typ.make(knd.rec, sel3b)
+const sel3b = {name:'', params:[{name:'name', typ: typ.str}]}
+const sel3 = typ.make(knd.rec, sel3b)
 sel3b.params.push({name:'children', typ:typ.listOf(sel3)})
 
-let sel4b = {name:'', params:[{name:'name', typ: typ.str}]}
-let sel4 = typ.make(knd.rec|knd.none, sel4b)
+const sel4b = {name:'', params:[{name:'name', typ: typ.str}]}
+const sel4 = typ.make(knd.rec|knd.none, sel4b)
 sel4b.params.push({name:'children', typ:typ.listOf(sel4)})
 
-let instTests:[string, Type][] = [
+const instTests:[string, Type][] = [
 	['int', typ.int],
 	['<rec a:num@7 b:@7>', typ.rec(
 		{name:'a', typ:typ.var(1, typ.num)},
@@ -71,12 +71,12 @@ let instTests:[string, Type][] = [
 ]
 
 test.each(instTests)('inst %s', (raw, want) => {
-	let c = new Ctx()
-	let got = c.inst(parseType(scan(raw)))
+	const sys = new Sys()
+	const got = sys.inst(parseType(scan(raw)))
 	expect(got).toEqual(want)
 })
 
-let unifyTests:[string, string, Type, string][] = [
+const unifyTests:[string, string, Type, string][] = [
 	['int', 'int', typ.int, ''],
 	['num', 'int', typ.int, ''],
 	['int', 'num', typ.int, ''],
@@ -99,12 +99,12 @@ let unifyTests:[string, string, Type, string][] = [
 ]
 
 test.each(unifyTests)('unify %s %s', (aa, bb, want, err) => {
-	let c = new Ctx()
-	let a = c.inst(parseType(scan(aa)))
-	let b = c.inst(parseType(scan(bb)))
+	const sys = new Sys()
+	const a = sys.inst(parseType(scan(aa)))
+	const b = sys.inst(parseType(scan(bb)))
 	if (err) {
-		expect(() => c.unify(a, b)).toThrow(err)
+		expect(() => sys.unify(a, b)).toThrow(err)
 	} else {
-		expect(c.unify(a, b)).toEqual(want)
+		expect(sys.unify(a, b)).toEqual(want)
 	}
 })
