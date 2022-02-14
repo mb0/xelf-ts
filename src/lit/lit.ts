@@ -1,13 +1,6 @@
 import {knd} from '../knd'
 import {quote} from '../cor'
-import {Src, AstErr} from '../ast'
 import {Type, typ} from '../typ'
-
-export interface Lit {
-	typ:Type
-	val:Val
-	src?:Src
-}
 
 export type Val = null | boolean | number | string | Date | Type | List | Dict | Spec
 export type List = Val[]
@@ -18,11 +11,9 @@ interface Spec {
 	decl:Type
 }
 
-export const lit = {toStr, valStr, withSrc, zero, make}
+export const lit = {toStr, zero, make}
 
-function withSrc(a:Lit, src?:Src):Lit { return {typ:a.typ, val:a.val, src} }
-function toStr(e:Lit, json?:boolean):string { return valStr(e.val, json) }
-function valStr(v:Val, json?:boolean):string {
+function toStr(v:Val, json?:boolean):string {
 	let q = json ? '"' : '\''
 	if (typeof v === "string")
 		return quote(v, q)
@@ -36,7 +27,7 @@ function valStr(v:Val, json?:boolean):string {
 		let arr = v as List
 		arr.forEach(e => {
 			if (r.length > 1) r += sep
-			r += valStr(e, json)
+			r += toStr(e, json)
 		})
 		r += ']'
 		return r
@@ -60,7 +51,7 @@ function valStr(v:Val, json?:boolean):string {
 			} else {
 				r += k
 			}
-			r += ':'+ valStr(obj[k], json)
+			r += ':'+ toStr(obj[k], json)
 		})
 		r += '}'
 		return r
@@ -68,16 +59,12 @@ function valStr(v:Val, json?:boolean):string {
 	throw new Error("lit toString unknown literal "+ JSON.stringify(v))
 }
 
-function zero(e:Lit):boolean {
-	if (!e) throw new AstErr("not a literal in zero", e)
-	if (typ.has(e.typ, knd.typ))
-		return !(e.val as Type).kind
-	if (Array.isArray(e.val))
-		return !e.val.length
-	return !e.val
+function zero(v:Val):boolean {
+	if (Array.isArray(v)) return !v.length
+	return !v || v == typ.void
 }
 
-function make(t:Type, src?:Src):Lit {
+function make(t:Type):Val {
 	let k = t.kind&knd.all
 	let val:Val
 	if (k&knd.none) val = null
@@ -89,6 +76,6 @@ function make(t:Type, src?:Src):Lit {
 	else if (k&knd.keyr) val = {}
 	else if (k&knd.idxr) val = []
 	else throw new Error("cannot make unresolved type "+ typ.toStr(t))
-	return {typ:t, val, src}
+	return val
 }
 

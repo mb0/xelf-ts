@@ -29,7 +29,7 @@ let tests:[Val, string, string, string][] = [
 ]
 test.each(tests)('parse lit %s %s', (want, str, out, jsn) => {
 	let got = parse(scan(str))
-	expect(got.val).toEqual(want)
+	expect(got).toEqual(want)
 	let jgot = lit.toStr(got, true)
 	expect(jgot).toEqual(jsn || str)
 	let xgot = lit.toStr(got)
