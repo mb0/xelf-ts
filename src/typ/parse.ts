@@ -1,5 +1,5 @@
 import {knd, parseKindName} from '../knd'
-import {Src, SrcErr, Ast, AstErr, ast} from '../ast'
+import {Src, Ast, errs, ast} from '../ast'
 import {Type, ParamBody, Const} from './typ'
 import {typ} from './pre'
 import {common} from './alt'
@@ -27,18 +27,18 @@ export function parseType(a:Ast, stack?:Type[]):Type {
 		return parseSym(t.raw, t.src, stack)
 	}
 	if (t.kind != knd.typ || !ast.isSeq(a))
-		throw new AstErr("unexpected type start", t)
+		throw errs.invalidType(a)
 	if (a.length < 3)
 		return typ.void
 	let fst = ast.tok(a[1])
 	if (fst.kind != knd.sym)
-		throw new AstErr("unexpected type start", fst)
+		throw errs.invalidType(fst)
 	let res = parseSym(fst.raw, fst.src, stack)
 	let l = typ.last(res)
 	let args = a.slice(2, -1)
 	if (typ.is(l, knd.any)) {
 		if (args.length > 0)
-			throw new AstErr("expected no type argument", a)
+			throw errs.invalidParams(a)
 		return res
 	} else if (typ.has(l, knd.alt)) {
 		let alt = args.map(c => parseType(c, stack)).reduce(common)
@@ -46,12 +46,12 @@ export function parseType(a:Ast, stack?:Type[]):Type {
 		l.body = alt.body
 	} else if (typ.has(l, knd.bits | knd.enum)) {
 		if (!args.length || (fst = ast.tok(args[0])).kind != knd.sym)
-			throw new AstErr("enum without name", a)
+			throw errs.expectSym(a)
 		l.body = {name:fst.raw, consts:args.slice(1).map(c => {
 			let ct = ast.tok(c)
 			if (ct.kind != knd.tag) {
 				if (ct.kind != knd.sym)
-					throw new AstErr("const without name", ct)
+					throw errs.expectSym(a)
 				return {name: ct.raw} as Const
 			}
 			let ca = c as Ast[]
@@ -59,13 +59,13 @@ export function parseType(a:Ast, stack?:Type[]):Type {
 			if (ca.length < 3) return {name}
 			let cv = ast.tok(ca[2])
 			if (cv.kind != knd.num)
-				throw new AstErr("const value not a number", cv)
+				throw errs.unexpected(ca[2])
 			let val = parseFloat(cv.raw)
 			return {name:name, val} as Const
 		})}
 	} else if (typ.has(l, elkinds)) {
 		if (args.length > 1)
-			throw new AstErr("expected at most one type argument", a)
+			throw errs.invalidParams(a)
 		if (args.length) {
 			let hist = (stack||[]).concat(l)
 			l.body = {el:parseType(args[0], hist)}
@@ -74,7 +74,7 @@ export function parseType(a:Ast, stack?:Type[]):Type {
 		let name = ""
 		if ((l.kind&knd.spec) == knd.form || (l.kind&knd.data) == knd.obj) {
 			if (!args.length || (fst = ast.tok(args[0])).kind != knd.sym)
-				throw new AstErr("obj without name", a)
+				throw errs.expectSym(args[0])
 			name = fst.raw
 			args = args.slice(1)
 		}
@@ -103,18 +103,18 @@ const pakinds = knd.tupl | knd.rec | knd.obj | knd.spec
 export function parseSym(sym:string, src?:Src, stack?:Type[]):Type {
 	if (!sym) return typ.void
 	return sym.split('|').reduceRight((a:Type, s:string):Type => {
-		if (!s) throw new SrcErr("unexpected empty type ", src, sym)
+		if (!s) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
 		let opt = s[s.length-1] == '?'
 		if (opt) {
 			if (s.length == 1) return typ.all
 			s = s.slice(0, -1)
 		}
 		let m = s.match(/^(?:([a-z]+)|([.\/][^@?]*))?([@](?:\w[^?]*)?)?$/)
-		if (!m) throw new SrcErr("unexpected type " +s, src, sym)
+		if (!m) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
 		let res = typ.make(0)
 		if (m[1]) { // kind
 			res.kind = parseKindName(m[1])
-			if (res.kind < 0) throw new SrcErr("invalid type", src, s)
+			if (res.kind < 0) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
 		} else if (m[2]) {
 			res.kind = knd.sel
 			res.body = {path:m[2], sel:a.kind>0?a:typ.void}
@@ -134,7 +134,7 @@ export function parseSym(sym:string, src?:Src, stack?:Type[]):Type {
 		if (res.kind&elkinds) {
 			res.body = {el:a}
 		} else if (!(res.kind&(knd.sel|knd.tupl))) {
-			throw new SrcErr("unexpected type", src, sym)
+			throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
 		}
 		return res
 	}, typ.void)

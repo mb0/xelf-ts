@@ -19,20 +19,6 @@ export interface Src {
 	end:number
 }
 
-// TODO use error codes
-export class SrcErr extends Error {
-	name:string = "SrcErr"
-	src:Src
-	constructor(msg:string, src?:Src,
-		public raw:string = ""
-	) {
-		super(raw ? msg +" at "+ raw : msg)
-		this.src = src || {pos:0, end:0}
-	}
-	toString():string {
-		return srcStr(this.src) +" "+ this.message
-	}
-}
 export interface Tok {
 	kind:number
 	src:Src
@@ -95,14 +81,6 @@ function tag(a:Ast):string {
 }
 export const ast = {tag, src:astSrc, toStr, tok, isSeq, isTag}
 
-// AstErr may be thrown by resl or eval functions
-export class AstErr extends SrcErr {
-	name:string = "AstErr"
-	constructor(msg:string,
-		public ast:Ast
-	) { super(msg, astSrc(ast), toStr(ast)) }
-}
-
 export function scan(s:string):Ast { return new Lexer(s).scan() }
 
 // TODO regexp parser
@@ -154,7 +132,7 @@ export class Lexer {
 			return this.lexNumber()
 		if (cor.nameStart(c) || cor.punct(c))
 			return this.lexSymbol()
-		throw new SrcErr("unexpected rune", this.src(), c)
+		throw errs.tokStart(this.src(), c)
 	}
 	lexPunct():Tok|null {
 		let idx = ',:;()[]{}<>'.indexOf(this.cur)
@@ -177,7 +155,7 @@ export class Lexer {
 			esc = !esc && c == '\\' && q != '`'
 			c = this.next()
 		}
-		if (c == '') throw new SrcErr("unterminated string", s, q)
+		if (c == '') throw errs.strTerm(s, q)
 		return {kind: knd.str, src: this.end(s, 1), raw: this.r.slice(idx, this.idx+1)}
 	}
 	lexSymbol():Tok {
@@ -196,15 +174,13 @@ export class Lexer {
 		if (c != '0') {
 			while (cor.digit(this.nxt)) this.next()
 		} else if (cor.digit(this.nxt)) {
-			throw new SrcErr("number zero must be followed by a dot or whitespace",
-				this.end(s, 1), this.r.slice(idx, this.idx+2))
+			throw errs.adjZero(this.end(s, 1))
 		}
 		let k = knd.int
 		if (this.nxt == '.') {
 			k = knd.real
 			this.next()
-			if (!cor.digit(this.nxt)) throw new SrcErr("expect digit",
-				this.end(s, 1), this.r.slice(idx, this.idx+2))
+			if (!cor.digit(this.nxt)) throw errs.numFrac(this.end(s, 1))
 			while (cor.digit(this.nxt)) this.next()
 		}
 		if (this.nxt == 'e' || this.nxt == 'E') {
@@ -212,8 +188,7 @@ export class Lexer {
 			this.next()
 			let nxt = this.nxt
 			if (nxt == '+' || nxt == '-') this.next()
-			if (!cor.digit(this.nxt)) throw new SrcErr("expect digit",
-				this.end(s, 1), this.r.slice(idx, this.idx+2))
+			if (!cor.digit(this.nxt)) throw errs.numExpo(this.end(s, 1))
 			while (cor.digit(this.nxt)) this.next()
 		}
 		return {kind: k, src: this.end(s, 1), raw: this.r.slice(idx, this.idx+1)}
@@ -231,14 +206,12 @@ function _scan(l:Lexer, s:Tok):Ast {
 	let res:Ast[] = [s]
 	let t = l.token()
 	while (t.kind >= 0 && t.raw != end) {
-		if (!t.kind || t.kind == knd.tag)
-			throw new AstErr("unexpected punctuation", t)
+		if (!t.kind || t.kind == knd.tag) throw errs.invalidSep(t)
 		let a = _scan(l, t)
 		let at = t
 		t = l.token()
 		if (t.kind == knd.tag) {
-			if (!(at.kind&(knd.sym|knd.str|knd.int)))
-				throw new AstErr("expect tag start symbol or string", at)
+			if (!(at.kind&(knd.sym|knd.str|knd.int))) throw errs.invalidTag(at)
 			let tag:Seq = [t, a]
 			res.push(tag)
 			let xs = t.raw == ';'
@@ -252,7 +225,7 @@ function _scan(l:Lexer, s:Tok):Ast {
 		}
 		if (!t.kind) t = l.token()
 	}
-	if (t.raw != end) throw new AstErr("unterminated", t)
+	if (t.raw != end) throw errs.treeTerm(t)
 	res.push(t)
 	return res
 }
@@ -263,4 +236,40 @@ function parens(k:number):string {
 	if (k&knd.list) return '[]'
 	if (k&knd.keyr) return '{}'
 	return '«»'
+}
+
+export class AstError extends Error {
+	name:string = "AstError"
+	constructor(
+		public src:Src,
+		public code:number,
+		msg:string,
+		public raw:string = ""
+	) {
+		super(msg)
+		this.src = src || {pos:0, end:0}
+	}
+	toString():string {
+		return srcStr(this.src) +" "+ this.message +" E"+ this.code + (this.raw ? "\n\t"+this.raw : "")
+	}
+}
+
+const astErr = (src:Src, code:number, msg:string, raw?:string):AstError => new AstError(src, code, msg, raw)
+
+export const errs = {
+	tokStart: (src:Src, c:string) => astErr(src, 101, "unexpected token start", "at input "+ c),
+	adjZero:  (src:Src) => astErr(src, 102, "adjaccent zeros", "number zero must be followed by a fraction or whitespce"),
+	numFrac:  (src:Src) => astErr(src, 103, "expect number fraction"),
+	numExpo:  (src:Src) => astErr(src, 104, "expect number exponent"),
+	strTerm:  (src:Src, q:string) => astErr(src, 105, "unterminated string", "expecting closing "+ q),
+	unquote:  (t:Tok)   => astErr(t.src, 106, "invalid string quoting"),
+	treeTerm: (t:Tok)   => astErr(t.src, 111, "unterminated tree"),
+	invalidSep: (t:Tok) => astErr(t.src, 112, "invalid separator"),
+	invalidTag: (t:Tok) => astErr(t.src, 113, "invalid tag"),
+	unexpected: (a:Ast) => astErr(astSrc(a), 201, "unexpected input "+ toStr(a)),
+	expectSym: (a:Ast) => astErr(astSrc(a), 202, "expected sym got "+ toStr(a)),
+	expectTag: (a:Ast) => astErr(astSrc(a), 203, "expected tag got "+ toStr(a)),
+	invalidType:(a:Ast) => astErr(astSrc(a), 301, "invalid type "+ toStr(a)),
+	invalidParams:(a:Ast) => astErr(astSrc(a), 302, "invalid type parameters "+ toStr(a)),
+	invalid:(a:Ast, kind:number, err?:string) => astErr(astSrc(a), 402, `invalid ${kind} got ${toStr(a)}`, err)
 }

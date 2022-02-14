@@ -51,8 +51,8 @@ let tests:[string, Ast|null, string][] = [
 		tok(knd.keyr, span(13, 1), "}")
 	], ""],
 	["{", null, "unterminated"],
-	["{:}", null, "unexpected"],
-	["{,}", null, "unexpected"],
+	["{:}", null, "invalid sep"],
+	["{,}", null, "invalid sep"],
 	["'", null, "unterminated"],
 	["`", null, "unterminated"],
 ]

@@ -1,6 +1,6 @@
 import {knd} from '../knd'
 import {unquote} from '../cor'
-import {Ast, AstErr, Tok, ast} from '../ast'
+import {Ast, errs, Tok, ast} from '../ast'
 import {Dict, Val} from './lit'
 
 export function parseSym(a:Tok):Val|undefined {
@@ -21,7 +21,7 @@ export function parse(a:Ast):Val {
 		case knd.int:
 		case knd.real:
 			const n = parseFloat(a.raw)
-			if (isNaN(n)) throw new AstErr("invalid number", a)
+			if (isNaN(n)) throw errs.invalid(a, a.kind)
 			return n
 		case knd.str:
 			return unquote(a.raw)
@@ -36,13 +36,13 @@ export function parse(a:Ast):Val {
 			return n.map(e => parse(e))
 		} else if (t.kind&knd.keyr) {
 			let dict = n.reduce((d:Dict, e) => {
-				if (!ast.isTag(e, true)) throw new AstErr("expect tag", e)
+				if (!ast.isTag(e, true)) throw errs.expectTag(e)
 				d[ast.tag(e[1])] = parse(e[2])
 				return d
 			}, {})
 			return dict
 		}
 	}
-	throw new AstErr("unexpected token", a)
+	throw errs.unexpected(a)
 }
 
