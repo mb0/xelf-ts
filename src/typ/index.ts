@@ -1,4 +1,5 @@
-export type {Type, Body, RefBody, ElBody, SelBody, ParamBody, ConstBody, Param, Const} from './typ'
+export {knd} from '../knd'
+export {Type, Body, RefBody, ElBody, SelBody, ParamBody, ConstBody, Param, Const} from './typ'
 export {typ} from './pre'
 export {Sys} from './sys'
 export {parseType, parseSym} from './parse'
