@@ -74,3 +74,21 @@ export const make = (t:Type):Val => {
 	return val
 }
 
+export function equal(a:Val, b:Val):boolean {
+	if (a == b) return true
+	if (a == null) return b == null
+	if (a instanceof Date) return b instanceof Date && a.getTime() == b.getTime()
+	if (Array.isArray(a)) {
+		if (!Array.isArray(b) || a.length != b.length) return false
+		if (a.find((el, i) => !equal(el, b[i]))) return false
+		return true
+	}
+	if (typeof a == "object") {
+		if (b == null || typeof b != "object") return false
+		let keys = Object.keys(a)
+		if (!equal(keys, Object.keys(b))) return false
+		if (keys.find(k => !equal((a as Dict)[k], (b as Dict)[k]))) return false
+		return true
+	}
+	return false
+}
