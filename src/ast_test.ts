@@ -15,8 +15,8 @@ test("basic lexer", () => {
 	expect(l.nxt).toEqual('t')
 	let want:Tok[] = [
 		tok(knd.sym, span(0, 4), "test"),
-		tok(knd.int, span(5, 3), "123"),
-		tok(knd.str, span(9, 5), "'str'"),
+		tok(knd.num, span(5, 3), "123"),
+		tok(knd.char, span(9, 5), "'str'"),
 		tok(-1, span(14,1), ""),
 	]
 	want.forEach(w => {
@@ -29,21 +29,21 @@ test("basic lexer", () => {
 let tests:[string, Ast|null, string][] = [
 	["0.12", tok(knd.real, span(0, 4), "0.12"), ""],
 	["[a -1 'c']", [
-		tok(knd.idxr, span(0, 1), "["),
+		tok(knd.list, span(0, 1), "["),
 		tok(knd.sym, span(1, 1), "a"),
-		tok(knd.int, span(3, 2), "-1"),
-		tok(knd.str, span(6, 3), "'c'"),
-		tok(knd.idxr, span(9, 1), "]"),
+		tok(knd.num, span(3, 2), "-1"),
+		tok(knd.char, span(6, 3), "'c'"),
+		tok(knd.list, span(9, 1), "]"),
 	], ""],
 	["{a:1,'b':2 c;}", [
 		tok(knd.keyr, span(0, 1), "{"),
 		[tok(knd.tag, span(2,1), ":"),
 			tok(knd.sym, span(1, 1), "a"),
-			tok(knd.int, span(3, 1), "1"),
+			tok(knd.num, span(3, 1), "1"),
 		],
 		[tok(knd.tag, span(8,1), ":"),
-			tok(knd.str, span(5, 3), "'b'"),
-			tok(knd.int, span(9, 1), "2"),
+			tok(knd.char, span(5, 3), "'b'"),
+			tok(knd.num, span(9, 1), "2"),
 		],
 		[tok(knd.tag, span(12,1), ";"),
 			tok(knd.sym, span(11, 1), "c"),

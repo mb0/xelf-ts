@@ -75,9 +75,9 @@ export function choose(a:Type, stack?:Type[]):Type {
 			if (r) return r
 		}
 		let hist = (stack||[]).concat(a)
-		return make(a.kind, {name: a.body.name,
+		return {kind:a.kind, ref:a.ref, id:a.id, body:{
 			params: a.body.params.map(p => ({name: p.name, typ:choose(p.typ, hist)}))
-		}, a.id)
+		}}
 	}
 	if (a.body && 'alts' in a.body) {
 		let alts = a.body.alts

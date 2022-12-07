@@ -3,6 +3,10 @@ import {Type, Body, Param, make, has, deopt, equal, equalBody} from './typ'
 import {alts} from './comp'
 import {common} from './alt'
 
+function makeRef(k:number, ref:string, body?:Body):Type {
+	return {kind:k, id:0, ref:ref||undefined, body:body}
+}
+
 export const typ = {
 	void: prim(knd.void),
 	none: prim(knd.none),
@@ -32,22 +36,21 @@ export const typ = {
 
 	data: prim(knd.data),
 	spec: prim(knd.spec),
-	any:  prim(knd.any),
 	all:  prim(knd.all),
+	any:  prim(knd.any),
 
 	opt: mark(knd.none),
-	deopt,
-	withID: (id:number, t:Type):Type => make(t.kind, t.body, id),
+	deopt, withRef,
+	withID: (id:number, {kind,body,ref}:Type):Type => ({kind, id, ref, body}),
 	var: (id:number, t?:Type):Type => {
 		t = t||typ.void
 		return make(t.kind|knd.var, t.body, id)
 	},
 
-	ref: (ref:string) => make(knd.ref, {ref}),
-	sel: (path:string, sel?:Type) => make(knd.sel, {path, sel:sel||typ.void}),
+	ref: (ref:string) => makeRef(knd.ref, ref),
+	sel: (path:string, sel?:Type) => makeRef(knd.sel, path, sel),
 
-	rec: (...ps:Param[]) => param(knd.rec, '', ps),
-	obj: (n:string, ...ps:Param[]) => param(knd.obj, n, ps),
+	obj: (...ps:Param[]) => param(knd.obj, ps),
 
 	typOf:  elem(knd.typ),
 	litOf:  elem(knd.lit),
@@ -55,10 +58,10 @@ export const typ = {
 	expOf:  elem(knd.exp),
 	listOf: elem(knd.list),
 	dictOf: elem(knd.dict),
-	tuplOf: (...ps:Param[]) => param(knd.tupl, '', ps),
+	tuplOf: (...ps:Param[]) => param(knd.tupl, ps),
 
-	func: (...ps:Param[]) => param(knd.func, '', ps),
-	form: (n:string, ...ps:Param[]) => param(knd.form, n, ps),
+	func: (...ps:Param[]) => param(knd.func, ps),
+	form: (n:string, ...ps:Param[]) => withRef(n, param(knd.form, ps)),
 
 	alt:  (...alts:Type[]) => alts.reduce(common),
 	mask: (t:Type, m:number) => make(t.kind&~m, t.body, t.id),
@@ -69,28 +72,29 @@ export const typ = {
 function is(t:Type, k:number) { return (t.kind&k) == k }
 function prim(k:number) { return Object.freeze(make(k)) }
 function mark(k:number):(t:Type)=>Type {
-	return (t:Type) => is(t, k) ? t : make(t.kind|k, t.body, t.id)
+	return (t:Type) => is(t, k) ? t : {kind:t.kind|k, body:t.body, id:t.id, ref:t.ref}
 }
 function elem(k:number):(t:Type)=>Type {
-	return (el:Type) => make(k, {el})
+	return (el:Type) => make(k, el)
 }
-function param(k:number, name:string, params:Param[]):Type {
-	return make(k, {name, params})
+function param(k:number, params:Param[]):Type {
+	return make(k, {params})
+}
+function withRef(ref:string, {kind,id,body}:Type):Type {
+	return {kind, id, ref:ref||undefined, body}
 }
 
 function last(t:Type):Type {
 	while (t && t.body) {
-		if ('el' in t.body) {
-			t = t.body.el
-		} else if ('sel' in t.body) {
-			t = t.body.sel
+		if ('kind' in t.body) {
+			t = t.body
 		} else break
 	}
 	return t
 }
 function base(t:Type):Type {
 	while (t.kind&knd.exp) {
-		t = t.body && 'el' in t.body ? t.body.el : typ.void
+		t = t.body && 'kind' in t.body ? t.body : typ.void
 	}
 	return t
 }
@@ -105,21 +109,19 @@ function str(b:string, t:Type, stack?:Body[]):string {
 		return b + "<>"
 	case knd.none:
 		return b + "none"
-	case knd.any:
-		return b + "any"
 	case knd.all:
+		return b + "all"
+	case knd.any:
 		return b + "?"
 	case knd.ref:
-		b += "@"
-		if (t.body && 'ref' in t.body) b += t.body.ref
+		b += "@" + t.ref
 		return b
 	case knd.sel:
 	case knd.sel|knd.none:
-		if (!t.body || !('path' in t.body)) throw new Error("sel type without body")
-		let {path, sel} = t.body
-		b += path
+		let sel = t.body
+		b += t.ref
 		if (t.kind&knd.none) b += '?'
-		return sel.kind ? str(b+'|', sel, stack) : b
+		return sel && 'kind' in sel && sel.kind ? str(b+'|', sel, stack) : b
 	case knd.var:
 		b += "@"
 		if (t.id>0) b += t.id
@@ -137,20 +139,20 @@ function str(b:string, t:Type, stack?:Body[]):string {
 	let n = k ? knd.name(k) : ''
 	if ((t.body && 'alts' in t.body||!n) && knd.isAlt(t.kind)) {
 		b = defSuffix(b, 'alt', t)
+		if (t.ref) b += '@'+ t.ref
 		alts(t).forEach((a:Type) => {
 			b += ' '+ str('', a, stack)
 		})
 		return '<'+ b +'>'
 	}
+	b = defSuffix(b, n, t)
+	if (t.ref) b += '@'+ t.ref
 	if (t.body) {
 		let tb = t.body
-		if ('el' in tb) {
-			b = defSuffix(b, n, t)
-			if (tb.el == typ.void) return b
-			return str(b+'|', tb.el, stack)
+		if ('kind' in tb) {
+			if (tb == typ.void) return b
+			return str(b+'|', tb, stack)
 		}
-		b = defSuffix(b, n, t)
-		if ('name' in tb && tb.name) b += ' '+ tb.name
 		if ('params' in tb) {
 			let hist = (stack||[]).concat(tb)
 			if (hist.length > 99) throw new Error("history")
@@ -160,7 +162,6 @@ function str(b:string, t:Type, stack?:Body[]):string {
 		}
 		return '<'+ b +'>'
 	}
-	b = defSuffix(b, n, t)
 	return b
 }
 

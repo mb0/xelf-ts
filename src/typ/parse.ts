@@ -40,14 +40,14 @@ export function parseType(a:Ast, stack?:Type[]):Type {
 		if (args.length > 0)
 			throw errs.invalidParams(a)
 		return res
-	} else if (typ.has(l, knd.alt)) {
+	}
+	if (!args.length) return res
+	if (typ.has(l, knd.alt)) {
 		let alt = args.map(c => parseType(c, stack)).reduce(common)
 		l.kind = alt.kind | (l.kind&(knd.none|knd.var))
 		l.body = alt.body
-	} else if (typ.has(l, knd.bits | knd.enum)) {
-		if (!args.length || (fst = ast.tok(args[0])).kind != knd.sym)
-			throw errs.expectSym(a)
-		l.body = {name:fst.raw, consts:args.slice(1).map(c => {
+	} else if (typ.has(l, knd.bits | knd.enum)){
+		l.body = {consts:args.map(c => {
 			let ct = ast.tok(c)
 			if (ct.kind != knd.tag) {
 				if (ct.kind != knd.sym)
@@ -66,19 +66,10 @@ export function parseType(a:Ast, stack?:Type[]):Type {
 	} else if (typ.has(l, elkinds)) {
 		if (args.length > 1)
 			throw errs.invalidParams(a)
-		if (args.length) {
-			let hist = (stack||[]).concat(l)
-			l.body = {el:parseType(args[0], hist)}
-		}
+		let hist = (stack||[]).concat(l)
+		l.body = parseType(args[0], hist)
 	} else if (typ.has(l, pakinds)) {
-		let name = ""
-		if ((l.kind&knd.spec) == knd.form || (l.kind&knd.data) == knd.obj) {
-			if (!args.length || (fst = ast.tok(args[0])).kind != knd.sym)
-				throw errs.expectSym(args[0])
-			name = fst.raw
-			args = args.slice(1)
-		}
-		let body:ParamBody = l.body = {name:name, params:[]}
+		let body:ParamBody = l.body = {params:[]}
 		let hist = (stack||[]).concat(l)
 		args.forEach(c => {
 			let ct = ast.tok(c)
@@ -96,7 +87,7 @@ export function parseType(a:Ast, stack?:Type[]):Type {
 	return res
 }
 const elkinds = (knd.exp&~knd.tupl) | knd.cont | knd.typ
-const pakinds = knd.tupl | knd.rec | knd.obj | knd.spec
+const pakinds = knd.tupl | knd.obj | knd.spec
 
 // pipe: sym ('|' sym)* // sym not empty
 // sym:  (kind|[./]path)?('@'(idx|name))?('?')?
@@ -106,7 +97,7 @@ export function parseSym(sym:string, src?:Src, stack?:Type[]):Type {
 		if (!s) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
 		let opt = s[s.length-1] == '?'
 		if (opt) {
-			if (s.length == 1) return typ.all
+			if (s.length == 1) return typ.any
 			s = s.slice(0, -1)
 		}
 		let m = s.match(/^(?:([a-z]+)|([.\/][^@?]*))?([@](?:\w[^?]*)?)?$/)
@@ -117,7 +108,8 @@ export function parseSym(sym:string, src?:Src, stack?:Type[]):Type {
 			if (res.kind < 0) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
 		} else if (m[2]) {
 			res.kind = knd.sel
-			res.body = {path:m[2], sel:a.kind>0?a:typ.void}
+			res.ref = m[2]
+			// TODO sel body res.body = a.kind>0?a:typ.void
 		}
 		if (m[3]) { // var
 			let v = m[3].slice(1)
@@ -125,14 +117,14 @@ export function parseSym(sym:string, src?:Src, stack?:Type[]):Type {
 				if (!res.kind||knd.isAlt(res.kind)) res.kind |= knd.var
 				res.id = v ? parseInt(v, 10) : -1
 			} else {
-				res.kind |= knd.ref
-				res.body = {ref:v}
+				res.ref = v
+				if (res.kind == 0) res.kind |= knd.ref
 			}
 		}
 		if (opt) res.kind |= knd.none
 		if (a.kind <= 0) return res
 		if (res.kind&elkinds) {
-			res.body = {el:a}
+			res.body = a
 		} else if (!(res.kind&(knd.sel|knd.tupl))) {
 			throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
 		}

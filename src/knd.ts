@@ -27,34 +27,29 @@ export const knd = {
 
 	list: 1<<18,  // 0x0040000
 	dict: 1<<19,  // 0x0080000
-	rec:  1<<20,  // 0x0100000
-	obj:  1<<21,  // 0x0200000
+	obj:  1<<20,  // 0x0100000
 
-	func: 1<<22,  // 0x0400000
-	form: 1<<23,  // 0x0800000
+	func: 1<<21,  // 0x0200000
+	form: 1<<22,  // 0x0400000
 
-	alt:  1<<24,  // 0x1000000
-	var:  1<<25,  // 0x2000000
-	ref:  1<<26,  // 0x4000000
-	sel:  1<<27,  // 0x8000000
-
+	alt:  1<<23,  // 0x0800000
+	var:  1<<24,  // 0x1000000
+	ref:  1<<25,  // 0x2000000
+	sel:  1<<26,  // 0x4000000
 
 	exp:  0x00000f4, // lit|sym|tag|tupl|call
-	schm: 0x0220800, // bits|enum|obj
-	meta: 0xf000000, // alt|var|ref|sel
+	meta: 0x7800000, // alt|var|ref|sel
 
 	num:  0x0000e00, // int|real|bits
-	cron: 0x0018000, // span|time
-	char: 0x003f000, // str|raw|uuid|cron|enum
+	char: 0x003f000, // str|raw|uuid|span|time|enum
 	prim: 0x003ff00, // bool|num|char
 	cont: 0x00c0000, // list|dict
-	strc: 0x0300000, // rec|obj
-	idxr: 0x0340000, // list|strc
-	keyr: 0x0380000, // dict|strc
-	data: 0x03fff00, // prim|cont|strc
-	spec: 0x0c00000, // func|form
-	any:  0x0ffff08, // data|typ|spec
-	all:  0x0ffff09, // any|none
+	idxr: 0x0140000, // list|obj
+	keyr: 0x0180000, // dict|obj
+	data: 0x01fff00, // prim|cont|obj
+	spec: 0x0600000, // func|form
+	all:  0x07fff08, // data|typ|spec
+	any:  0x07fff09, // all|none
 
 	names: [] as KindInfo[],
 	name, isAlt, count,

@@ -14,7 +14,6 @@ export const cmp = {
 }
 
 const anytyp = make(knd.all,undefined, 0)
-const namekinds = knd.tupl|knd.rec|knd.obj
 const unreskinds = knd.var|knd.ref|knd.sel
 
 const elkinds = knd.typ|knd.exp|knd.cont
@@ -29,7 +28,7 @@ export function compare(src:Type, dst:Type):number {
 	if (src.id && src.id == dst.id) return cmp.sameid
 	// unwrap src expr type if dst is not an expr type
 	if (src.kind&knd.exp && !(dst.kind&knd.exp)) {
-		src = src.body && 'el' in src.body ? src.body.el : anytyp
+		src = src.body && 'kind' in src.body ? src.body : anytyp
 	}
 	// Handle meta types
 	// 4. return check if src or dst is unresolved (type variable, reference or selection)
@@ -66,8 +65,8 @@ export function compare(src:Type, dst:Type):number {
 	let s = src.kind, d = dst.kind
 	let sb = src.body, db = dst.body
 	if (!sb != !db) {
-		if (!sb && (s&elkinds) != 0) sb = {el:typ.all}
-		else if (!db && (d&elkinds) != 0) db = {el:typ.all}
+		if (!sb && (s&elkinds) != 0) sb = typ.any
+		else if (!db && (d&elkinds) != 0) db = typ.any
 		if (s == d && equalBody(sb, db)) return cmp.same
 	}
 	// 7. if dst has no body compare just the kinds
@@ -76,16 +75,16 @@ export function compare(src:Type, dst:Type):number {
 		if ((d|knd.none) == s) return cmp.opt
 		if (!(s&d&knd.data))
 			return cmp.none
-		if ((s&knd.any) == knd.char && d&knd.str)
+		if ((s&knd.all) == knd.char && d&knd.str)
 			return cmp.convert
-		if ((s&knd.any) == knd.num && d&knd.num)
+		if ((s&knd.all) == knd.num && d&knd.num)
 			return cmp.convert
 		return cmp.check
 	}
-	if ('el' in db) {
+	if ('kind' in db) {
 		if (!(s&d&(knd.data|knd.exp))) return cmp.none
 		let sel = anyEl(src)
-		let res = compare(sel, db.el)
+		let res = compare(sel, db)
 		if (res >= cmp.assign) {
 			if ((d|knd.none) == s) return cmp.opt
 			return cmp.assign
@@ -94,10 +93,8 @@ export function compare(src:Type, dst:Type):number {
 		return res
 	}
 	if (sb && 'params' in db && 'params' in sb) {
-		if (!(s&d&knd.any)) {
-			if (!(s&namekinds)||!(d&namekinds)) {
-				return cmp.none
-			}
+		if (!(s&d&knd.all)) {
+			return cmp.none
 		}
 		let dps = db.params
 		let sps = sb.params
@@ -117,7 +114,7 @@ export function compare(src:Type, dst:Type):number {
 	return cmp.none
 }
 function anyEl(t:Type):Type {
-	return t.body && 'el' in t.body ? t.body.el : make(knd.any|knd.none)
+	return t.body && 'kind' in t.body ? t.body : make(knd.any|knd.none)
 }
 export function alts(t:Type):Type[] {
 	if (!knd.isAlt(t.kind)) return [t]

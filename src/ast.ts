@@ -75,7 +75,7 @@ function tag(a:Ast):string {
 	}
 	if (!isSeq(a)) {
 		if (a.kind&knd.sym) return a.raw
-		if (a.kind&knd.str) return cor.unquote(a.raw)
+		if (a.kind&knd.char) return cor.unquote(a.raw)
 	}
 	return ''
 }
@@ -140,7 +140,7 @@ export class Lexer {
 		let k = knd.void
 		if (idx > 8) k = knd.typ
 		else if (idx > 6) k = knd.keyr
-		else if (idx > 4) k = knd.idxr
+		else if (idx > 4) k = knd.list
 		else if (idx > 2) k = knd.call
 		else if (idx > 0) k = knd.tag
 		return {kind:k, src:this.src(), raw:this.cur}
@@ -156,7 +156,7 @@ export class Lexer {
 			c = this.next()
 		}
 		if (c == '') throw errs.strTerm(s, q)
-		return {kind: knd.str, src: this.end(s, 1), raw: this.r.slice(idx, this.idx+1)}
+		return {kind: knd.char, src: this.end(s, 1), raw: this.r.slice(idx, this.idx+1)}
 	}
 	lexSymbol():Tok {
 		let idx = this.idx
@@ -176,7 +176,7 @@ export class Lexer {
 		} else if (cor.digit(this.nxt)) {
 			throw errs.adjZero(this.end(s, 1))
 		}
-		let k = knd.int
+		let k = knd.num
 		if (this.nxt == '.') {
 			k = knd.real
 			this.next()
@@ -198,7 +198,7 @@ export class Lexer {
 	}
 }
 
-const seqk = knd.cont|knd.strc|knd.typ|knd.call
+const seqk = knd.cont|knd.obj|knd.typ|knd.call
 
 function _scan(l:Lexer, s:Tok):Ast {
 	if (!(s.kind&seqk)) return s
@@ -211,7 +211,7 @@ function _scan(l:Lexer, s:Tok):Ast {
 		let at = t
 		t = l.token()
 		if (t.kind == knd.tag) {
-			if (!(at.kind&(knd.sym|knd.str|knd.int))) throw errs.invalidTag(at)
+			if (!(at.kind&(knd.sym|knd.char|knd.num))) throw errs.invalidTag(at)
 			let tag:Seq = [t, a]
 			res.push(tag)
 			let xs = t.raw == ';'

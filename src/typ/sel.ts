@@ -25,7 +25,7 @@ function selKey(t:Type, key:string):Type|null {
 		return p ? p.typ : null
 	}
 	if (typ.has(t, knd.keyr)) {
-		return t.body && 'el' in t.body ? t.body.el : typ.any
+		return t.body && 'kind' in t.body ? t.body : typ.any
 	}
 	return null
 }
@@ -37,7 +37,7 @@ function selIdx(t:Type, idx:number):Type|null {
 		return (idx >= 0 && idx < ps.length) ? ps[idx].typ : null
 	}
 	if (typ.has(t, knd.idxr)) {
-		return t.body && 'el' in t.body ? t.body.el : typ.any
+		return t.body && 'kind' in t.body ? t.body : typ.any
 	}
 	return null
 }

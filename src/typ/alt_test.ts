@@ -12,15 +12,15 @@ let tests:[string, string, Type][] = [
 	['int?', 'int', typ.opt(typ.int)],
 	['list|int', 'list|num', typ.listOf(typ.num)],
 	['int',  'num', typ.num],
-	['span', 'time', typ.make(knd.cron)],
+	['list', 'dict', typ.make(knd.cont)],
 	['int',  'real', typ.make(knd.int|knd.real)],
 	['int',  'str', typ.make(knd.int|knd.str)],
 	['int?', 'real', typ.make(knd.none|knd.int|knd.real)],
 	['int?', 'list|int', typ.make(knd.alt|knd.none|knd.int,
 		{alts:[typ.listOf(typ.int)]},
 	)],
-	['int', '<rec? foo:int>', typ.make(knd.alt|knd.none|knd.int,
-		{alts:[typ.rec({name:'foo', typ:typ.int})]},
+	['int', '<obj? foo:int>', typ.make(knd.alt|knd.none|knd.int,
+		{alts:[typ.obj({name:'foo', typ:typ.int})]},
 	)],
 ]
 

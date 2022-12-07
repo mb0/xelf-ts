@@ -19,12 +19,12 @@ export function parseSym(a:Tok):Val|undefined {
 export function parse(a:Ast):Val {
 	if (!ast.isSeq(a)) {
 		switch (a.kind) {
-		case knd.int:
+		case knd.num:
 		case knd.real:
 			const n = parseFloat(a.raw)
 			if (isNaN(n)) throw errs.invalid(a, a.kind)
 			return n
-		case knd.str:
+		case knd.char:
 			return unquote(a.raw)
 		case knd.sym:
 			const l = parseSym(a)
@@ -35,7 +35,7 @@ export function parse(a:Ast):Val {
 		let n = a.slice(1, -1)
 		if (t.kind&knd.list) {
 			return n.map(e => parse(e))
-		} else if (t.kind&knd.keyr) {
+		} else if (t.kind&knd.dict) {
 			let dict = n.reduce((d:Dict, e) => {
 				if (!ast.isTag(e, true)) throw errs.expectTag(e)
 				d[ast.tag(e[1])] = parse(e[2])
@@ -87,8 +87,8 @@ export function typedAs(v:Val, t:Type):Val {
 	case "object":
 		if (Array.isArray(v)) {
 			if (!(t.kind&knd.list)) break
-			if (t.body && 'el' in t.body) {
-				const {el} = t.body
+			if (t.body && 'kind' in t.body) {
+				const el = t.body
 				for (let i=0; i<v.length; i++) {
 					v[i] = typedAs(v[i], el)
 				}
@@ -101,15 +101,15 @@ export function typedAs(v:Val, t:Type):Val {
 		}
 		let w = v as Dict
 		if (t.kind&knd.dict) {
-			if (t.body && 'el' in t.body) {
-				const {el} = t.body
+			if (t.body && 'kind' in t.body) {
+				const el = t.body
 				Object.keys(w).forEach(key => {
 					w[key] = typedAs(w[key], el)
 				})
 			}
 			return w
 		}
-		if (t.kind&knd.strc) {
+		if (t.kind&knd.obj) {
 			// TODO make sure we have hydrated obj types?
 			if (t.body && 'params' in t.body) {
 				t.body.params.forEach(p => {

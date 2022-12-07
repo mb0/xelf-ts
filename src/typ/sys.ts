@@ -37,8 +37,7 @@ export class Sys {
 		return clone(r, [], (t:Type, _:Stack):Type => t.kind&knd.var ? this.get(t.id) : t)
 	}
 	inst(r:Type):Type {
-		let m = new Map()
-		return clone(r, [], inst(this, m))
+		return clone(r, [], inst(this, new Map()))
 	}
 	unify(t:Type, h:Type):Type {
 		let a = this.apply(t)
@@ -94,11 +93,11 @@ function unify(ctx:Sys, t:Type, h:Type):Type {
 		if (equalBody(a.body, b.body)) {
 			return done(a)
 		}
-		if (a.body && 'el' in a.body) {
+		if (a.body && 'kind' in a.body) {
 			let c = a
-			if (b.body && 'el' in b.body) { 
-				let el = unify(ctx, a.body.el, b.body.el)
-				c = typ.make(a.kind, {el}, a.id)
+			if (b.body && 'kind' in b.body) { 
+				let el = unify(ctx, a.body, b.body)
+				c = typ.make(a.kind, el, a.id)
 			}
 			return done(c)
 		}
@@ -120,18 +119,17 @@ type Editor = (t:Type, s:Stack)=>Type
 function clone(r:Type, stack:Stack, edit?:Editor):Type {
 	let s = stack.find(s => s[0] == r)
 	if (s) return s[1]
-	let t = typ.make(r.kind, r.body, r.id)
+	let t:Type = {kind:r.kind, id:r.id, ref:r.ref, body:r.body}
+	t.ref = r.ref
 	let b = t.body
 	if (!b) {
 	} else if ('alts' in b) {
 		t.body = {alts:b.alts.map(a => clone(a, stack, edit))}
-	} else if ('el' in b) {
-		t.body = {el:clone(b.el, stack, edit)}
-	} else if ('sel' in b && b.sel) {
-		t.body = {path:b.path, sel:clone(b.sel, stack, edit)}
+	} else if ('kind' in b) {
+		t.body = clone(b, stack, edit)
 	} else if ('params' in b) {
 		let ps:Param[] = []
-		t.body = {name:b.name, params:ps}
+		t.body = {params:ps}
 		stack = stack.concat([[r, t]])
 		b.params.forEach(p => {
 			let pt = clone(p.typ, stack, edit)
@@ -151,25 +149,25 @@ function inst(c:Sys, m:Map<number,Type>):Editor {
 			m.set(id, t)
 		}
 		if (id) {
-			t.id = ++c.maxid
-			c.map.set(t.id, t)
+			id = ++c.maxid
+			t.id = id
+			c.map.set(id, t)
 		}
-		let b = t.body
-		if (!b) return t
-		if ('ref' in b) {
-			let x = c.ref(b.ref)
-			if (!x) throw new Error("no type for ref "+ b.ref)
+		if (!t.ref) return t
+		if ((t.kind&knd.ref) != 0 && t.ref) {
+			let x = c.ref(t.ref)
+			if (!x) throw new Error("no type for ref "+ t.ref)
 			return t.kind&knd.none ? typ.opt(x) : typ.deopt(x)
 		}
-		if ('path' in b) {
-			let p = b.path
+		if ((t.kind&knd.sel) != 0 && t.ref)  {
+			let p = t.ref
 			let dots = 0
 			while (p.length > 0 && p[0] == '.') {
 				p = p.slice(1)
 				dots++
 			}
-			let sel = b.sel
-			if (sel.kind) {
+			let sel = t.body
+			if (sel && 'kind' in sel) {
 				if (dots>1) throw new Error("non-local sel cannot use dots in "+
 					typ.toStr(sel))
 				sel = clone(sel, s, edit)
@@ -181,7 +179,7 @@ function inst(c:Sys, m:Map<number,Type>):Editor {
 						s.reduce((a, s) => a + typ.toStr(s[0])+" ", ""))
 				sel = s[s.length-dots][1]
 				if (!sel)
-					throw new Error("no sel for " + b.path + " in " +
+					throw new Error("no sel for " + t.ref + " in " +
 						 s.reduce((a, s) => a + typ.toStr(s[0])+" ", ""))
 			}
 			if (p) {

@@ -33,43 +33,42 @@ test("context basics", () => {
 	expect(typ.toStr(fa)).toEqual("<func <func int@2 bool> list|int@2 list|int@2>")
 })
 
-const sel1b = {name:'', params:[{name:'name', typ: typ.str}]}
-const sel1 = typ.make(knd.rec, sel1b)
+const sel1b = {params:[{name:'name', typ: typ.str}]}
+const sel1 = typ.make(knd.obj, sel1b)
 sel1b.params.push({name:'parent', typ:typ.opt(sel1)})
 
-const sel2b = {name:'', params:[{name:'name', typ: typ.str}]}
-const sel2 = typ.make(knd.rec|knd.none, sel2b)
+const sel2b = {params:[{name:'name', typ: typ.str}]}
+const sel2 = typ.make(knd.obj|knd.none, sel2b)
 sel2b.params.push({name:'parent', typ:sel2})
 
-const sel3b = {name:'', params:[{name:'name', typ: typ.str}]}
-const sel3 = typ.make(knd.rec, sel3b)
+const sel3b = {params:[{name:'name', typ: typ.str}]}
+const sel3 = typ.make(knd.obj, sel3b)
 sel3b.params.push({name:'children', typ:typ.listOf(sel3)})
 
-const sel4b = {name:'', params:[{name:'name', typ: typ.str}]}
-const sel4 = typ.make(knd.rec|knd.none, sel4b)
+const sel4b = {params:[{name:'name', typ: typ.str}]}
+const sel4 = typ.make(knd.obj|knd.none, sel4b)
 sel4b.params.push({name:'children', typ:typ.listOf(sel4)})
 
 const instTests:[string, Type][] = [
 	['int', typ.int],
-	['<rec a:num@7 b:@7>', typ.rec(
+	['<obj a:num@7 b:@7>', typ.obj(
 		{name:'a', typ:typ.var(1, typ.num)},
 		{name:'b', typ:typ.var(1, typ.num)},
 	)],
-	['<rec a:num@7 b:.0>', typ.rec(
+	['<obj a:num@7 b:.0>', typ.obj(
 		{name:'a', typ:typ.var(1, typ.num)},
 		{name:'b', typ:typ.var(1, typ.num)},
 	)],
-	['<rec a:num b:.a>', typ.rec(
+	['<obj a:num b:.a>', typ.obj(
 		{name:'a', typ:typ.withID(1, typ.num)},
 		{name:'b', typ:typ.withID(1, typ.num)},
 	)],
-	['<rec name:str parent:.?>', sel1],
-	['<rec? name:str parent:.?>', sel2],
-	['<rec name:str children:list|.>', sel3],
-	['<rec? name:str children:list|.>', typ.opt(sel3)],
-	['<rec? name:str children:list|.?>', sel4],
+	['<obj name:str parent:.?>', sel1],
+	['<obj? name:str parent:.?>', sel2],
+	['<obj name:str children:list|.>', sel3],
+	['<obj? name:str children:list|.>', typ.opt(sel3)],
+	['<obj? name:str children:list|.?>', sel4],
 ]
-
 test.each(instTests)('inst %s', (raw, want) => {
 	const sys = new Sys()
 	const got = sys.inst(parseType(scan(raw)))
