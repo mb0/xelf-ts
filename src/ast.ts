@@ -1,4 +1,4 @@
-import * as cor from './cor'
+import {space, ctrl, digit, symPart, unquote} from './cor'
 import {knd} from './knd'
 
 const pl = 1e9
@@ -75,7 +75,7 @@ function tag(a:Ast):string {
 	}
 	if (!isSeq(a)) {
 		if (a.kind&knd.sym) return a.raw
-		if (a.kind&knd.char) return cor.unquote(a.raw)
+		if (a.kind&knd.char) return unquote(a.raw)
 	}
 	return ''
 }
@@ -83,9 +83,6 @@ export const ast = {tag, src:astSrc, toStr, tok, isSeq, isTag}
 
 export function scan(s:string):Ast { return new Lexer(s).scan() }
 
-// TODO regexp parser
-// regexp should be faster when matching strings, numbers and symbols
-// a well designed regexp in token should also reduce code size substantially
 export class Lexer {
 	cur:string = ""
 	nxt:string = ""
@@ -120,30 +117,16 @@ export class Lexer {
 	}
 	token():Tok {
 		let c = this.next()
-		while (cor.space(c))
-			c = this.next()
-		if (c == '')
-			return {kind:-1, src:this.src(), raw:c}
-		let p = this.lexPunct()
-		if (p) return p
-		if ('"\'`'.indexOf(c) != -1)
-			return this.lexString()
-		if (cor.digit(c) || c == '-' && cor.digit(this.nxt))
+		while (space(c)) c = this.next()
+		if (c == '') return {kind:-1, src:this.src(), raw:c}
+		const k = ctrl(c)
+		if (k == knd.str) return this.lexString()
+		if (k >= 0) return {kind:k, src:this.src(), raw:this.cur}
+		if (digit(c) || c == '-' && digit(this.nxt))
 			return this.lexNumber()
-		if (cor.nameStart(c) || cor.punct(c))
+		if (c >= '!' && c <= '~' && c != '\\') // symStart(c)
 			return this.lexSymbol()
 		throw errs.tokStart(this.src(), c)
-	}
-	lexPunct():Tok|null {
-		let idx = ',:;()[]{}<>'.indexOf(this.cur)
-		if (idx < 0) return null
-		let k = knd.void
-		if (idx > 8) k = knd.typ
-		else if (idx > 6) k = knd.keyr
-		else if (idx > 4) k = knd.list
-		else if (idx > 2) k = knd.call
-		else if (idx > 0) k = knd.tag
-		return {kind:k, src:this.src(), raw:this.cur}
 	}
 	lexString():Tok {
 		let idx = this.idx
@@ -161,9 +144,7 @@ export class Lexer {
 	lexSymbol():Tok {
 		let idx = this.idx
 		let s = this.src()
-		while (this.nxt != '' && (cor.namePart(this.nxt) || cor.punct(this.nxt))) {
-			this.next()
-		}
+		while (symPart(this.nxt)) this.next()
 		return {kind: knd.sym, src: this.end(s, 1), raw: this.r.slice(idx, this.idx+1)}
 	}
 	lexNumber():Tok {
@@ -172,24 +153,24 @@ export class Lexer {
 		let c = this.cur
 		if (c == '-') c = this.next()
 		if (c != '0') {
-			while (cor.digit(this.nxt)) this.next()
-		} else if (cor.digit(this.nxt)) {
+			while (digit(this.nxt)) this.next()
+		} else if (digit(this.nxt)) {
 			throw errs.adjZero(this.end(s, 1))
 		}
 		let k = knd.num
 		if (this.nxt == '.') {
 			k = knd.real
 			this.next()
-			if (!cor.digit(this.nxt)) throw errs.numFrac(this.end(s, 1))
-			while (cor.digit(this.nxt)) this.next()
+			if (!digit(this.nxt)) throw errs.numFrac(this.end(s, 1))
+			while (digit(this.nxt)) this.next()
 		}
 		if (this.nxt == 'e' || this.nxt == 'E') {
 			k = knd.real
 			this.next()
 			let nxt = this.nxt
 			if (nxt == '+' || nxt == '-') this.next()
-			if (!cor.digit(this.nxt)) throw errs.numExpo(this.end(s, 1))
-			while (cor.digit(this.nxt)) this.next()
+			if (!digit(this.nxt)) throw errs.numExpo(this.end(s, 1))
+			while (digit(this.nxt)) this.next()
 		}
 		return {kind: k, src: this.end(s, 1), raw: this.r.slice(idx, this.idx+1)}
 	}

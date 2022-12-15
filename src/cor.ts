@@ -1,11 +1,33 @@
 
 export function space(c:string):boolean  { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
 export function digit(c:string):boolean  { return c >= '0' && c <= '9' }
-export function punct(c:string):boolean  { return /^[!#$%&*+./=?@^|~-]/.test(c) }
-
-export function nameStart(c:string):boolean { return /^[a-zA-Z_]/.test(c) }
-export function namePart(c:string):boolean  { return /^[a-zA-Z_0-9]/.test(c) }
-export function isName(s:string):boolean { return /^[a-zA-Z_][a-zA-z_0-9]*$/.test(s) }
+export function letter(c:string):boolean {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+export function punct(c:string):boolean  {
+	return c >= '!' && c <= '~' && c != '\\' && ctrl(c) < 0 && !digit(c) && !letter(c)
+}
+export function ctrl(c:string):number {
+	switch (c) {
+	case '"': case "'": return 0x1000
+	case '(': case ')': return 0x80
+	case ',': return 0
+	case ':': case ';': return 0x20
+	case '<': case '>': return 0x08
+	case '[': case ']': return 0x140000
+	case '`': return 0x1000
+	case '{': case '}': return 0x180000
+	}
+	return -1
+}
+export function nameStart(c:string):boolean { return letter(c) || c == '_' }
+export function namePart(c:string):boolean  { return nameStart(c) || digit(c) }
+export function isName(s:string):boolean {return is(s, nameStart, namePart) }
+export function symStart(c:string):boolean { return symPart(c) && !digit(c) }
+export function symPart(c:string):boolean  {
+	return c >= '!' && c <= '~' && c != '\\' && ctrl(c) < 0
+}
+export function isSym(s:string):boolean { return is(s, symStart, symPart) }
 export function lastName(s:string):string {
 	let start = -1, end = 0
 	for (let i=0; i < s.length; i++) {
@@ -22,9 +44,14 @@ export function lastName(s:string):string {
 	return start < 0 ? "" : s.slice(start, end || s.length)
 }
 
-export function keyStart(c:string):boolean { return /^[a-z_]/.test(c) }
-export function keyPart(c:string):boolean  { return /^[a-z_0-9]/.test(c) }
-export function isKey(s:string):boolean { return /^[a-z_][a-z_0-9]*$/.test(s) }
+export function keyStart(c:string):boolean { return c >= 'a' && c <= 'z' || c == '_' }
+export function keyPart(c:string):boolean  { return keyStart(c) || digit(c) }
+export function isKey(s:string):boolean { return is(s, keyStart, keyPart) }
+function is(s:string, start:(c:string)=>boolean, part:(c:string)=>boolean):boolean {
+	if (!s || !start(s[0])) return false
+	for (let i=1; i<s.length; i++) if (!part(s[i])) return false
+	return true
+}
 export function keyed(s:string):string {
 	let start = -1, end = 0
 	for (let i=0; i < s.length; i++) {
