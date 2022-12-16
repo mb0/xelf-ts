@@ -29,11 +29,11 @@ test("basic lexer", () => {
 let tests:[string, Ast|null, string][] = [
 	["0.12", tok(knd.real, span(0, 4), "0.12"), ""],
 	["[a -1 'c']", [
-		tok(knd.list, span(0, 1), "["),
+		tok(knd.idxr, span(0, 1), "["),
 		tok(knd.sym, span(1, 1), "a"),
 		tok(knd.num, span(3, 2), "-1"),
 		tok(knd.char, span(6, 3), "'c'"),
-		tok(knd.list, span(9, 1), "]"),
+		tok(knd.idxr, span(9, 1), "]"),
 	], ""],
 	["{a:1,'b':2 c;}", [
 		tok(knd.keyr, span(0, 1), "{"),

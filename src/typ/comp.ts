@@ -1,120 +1,107 @@
 import {knd} from '../knd'
-import {typ} from './pre'
-import {Type, equal, equalBody, make} from './typ'
+import {Type, make, ParamBody, optParam} from './typ'
 
-export const cmp = {
-	none:    0,
-	check:   1,
-	contort: 2,
-	convert: 3,
-	opt:     4,
-	assign:  5,
-	sameid:  6,
-	same:    7,
+const kndVal = knd.any | knd.exp
+export function assignableTo(t:Type, dst:Type):boolean {
+	if (!knd.isAlt(t.kind) || (t.kind&knd.any) == knd.any) return assignTo(t, dst)
+	return always(t, dst) || !alts(t).find(tt => !assignTo(tt, dst))
 }
-
-const anytyp = make(knd.all,undefined, 0)
-const unreskinds = knd.var|knd.ref|knd.sel
-
-const elkinds = knd.typ|knd.exp|knd.cont
-
-// TODO reconsider special conversion rules should be explicit and done using the conv form
-export function compare(src:Type, dst:Type):number {
-	// 1. return same if src and dst type are strictly equal
-	if (equal(src, dst)) return cmp.same
-	// 2. return none if src or dst has a void or error kind
-	if (src.kind <= 0 || dst.kind <= 0) return cmp.none
-	// 3. return sameid if src and dst have the same type id
-	if (src.id && src.id == dst.id) return cmp.sameid
-	// unwrap src expr type if dst is not an expr type
-	if (src.kind&knd.exp && !(dst.kind&knd.exp)) {
-		src = src.body && 'kind' in src.body ? src.body : anytyp
-	}
-	// Handle meta types
-	// 4. return check if src or dst is unresolved (type variable, reference or selection)
-	if (src.kind&unreskinds && !(src.kind&knd.any)||
-		dst.kind&unreskinds && !(dst.kind&knd.any)) {
-		return cmp.check
-	}
-	// 5. if src is a flagged alt type return assign if all alts in src can assign to dst,
-	// convert if all alts can convert, check if at least on can convert and none if there is no
-	// overlap in alternatives between src and dst.
-	if (src.kind&knd.alt) {
-		let als = alts(src)
-		let asgn = 0, conv = 0
-		als.forEach(a => {
-			let c = compare(a, dst)
-			if (c >= cmp.assign) asgn++
-			else if (c >= cmp.convert) conv++
-		})
-		if (asgn == als.length) return cmp.assign
-		if (asgn+conv == als.length) return cmp.convert
-		if (asgn||conv) return cmp.check
-		return cmp.none
-	}
-	// 6. if only dst is an alt type find an alternative that src can convert to
-	if (dst.kind&knd.alt) {
-		let res = cmp.none
-		alts(dst).find(a => {
-			res = compare(src, a)
-			return res >= cmp.convert
-		})
-		if (res > cmp.assign) res = cmp.assign
-		return res
-	}
-	let s = src.kind, d = dst.kind
-	let sb = src.body, db = dst.body
-	if (!sb != !db) {
-		if (!sb && (s&elkinds) != 0) sb = typ.any
-		else if (!db && (d&elkinds) != 0) db = typ.any
-		if (s == d && equalBody(sb, db)) return cmp.same
-	}
-	// 7. if dst has no body compare just the kinds
-	if (!db) {
-		if ((d&s) == s) return cmp.assign
-		if ((d|knd.none) == s) return cmp.opt
-		if (!(s&d&knd.data))
-			return cmp.none
-		if ((s&knd.all) == knd.char && d&knd.str)
-			return cmp.convert
-		if ((s&knd.all) == knd.num && d&knd.num)
-			return cmp.convert
-		return cmp.check
-	}
+export function convertibleTo(t:Type, dst:Type):boolean {
+	if (!knd.isAlt(t.kind) || (t.kind&knd.any) == knd.any) return convertTo(t, dst)
+	return always(t, dst) || !!alts(t).find(tt => convertTo(tt, dst))
+}
+export function resolvableTo(t:Type, dst:Type):boolean {
+	const tids:number[] = []
+	const dids:number[] = []
+	t = unwrapExp(t, tids)
+	dst = unwrapExp(dst, dids)
+	return idMatch(tids, dids) || convertibleTo(t, dst)
+}
+function assignTo(t:Type, dst:Type):boolean {
+	if (always(t, dst)) return true
+	const sk = t.kind&kndVal
+	if (!sk) return false
+	const db = dst.body
+	if (!db) return (dst.kind&sk) == sk
 	if ('kind' in db) {
-		if (!(s&d&(knd.data|knd.exp))) return cmp.none
-		let sel = anyEl(src)
-		let res = compare(sel, db)
-		if (res >= cmp.assign) {
-			if ((d|knd.none) == s) return cmp.opt
-			return cmp.assign
-		}
-		if (res >= cmp.convert) return cmp.convert
-		return res
-	}
-	if (sb && 'params' in db && 'params' in sb) {
-		if (!(s&d&knd.all)) {
-			return cmp.none
-		}
-		let dps = db.params
-		let sps = sb.params
-		let e = dps.find((dp, i) => {
-			let sp:any = null
-			if (dp.name)  {
-				sp = sps.find(sp => sp.name == dp.name)
-			} else if (sps.length > i) {
-				sp = sps[i]
-			}
-			if (!sp) return true
-			let c = compare(sp.typ, dp.typ)
-			return c <= cmp.assign
+		return (dst.kind&sk) == sk && assignableTo(elem(t), db)
+	} else if ('alts' in db) {
+		if ((dst.kind&sk) == sk) return true
+		return !!alts(dst).find(da => assignableTo(t, da))
+	} else if ('params' in db) {
+		return !!t.body && 'params' in t.body && ((dst.kind&sk) == sk ||
+			((sk&knd.spec) != 0 && (dst.kind&knd.spec) != 0) ||
+			((sk&knd.obj) != 0 && (dst.kind&knd.obj) != 0)
+		) && !db.params.find(dp => {
+			const ps = (t.body as ParamBody).params
+			const f = ps.find(tp => tp.name == dp.name)
+			if (!f) return !optParam(dp)
+			return !assignableTo(f.typ, dp.typ)
 		})
-		if (!e) return cmp.assign
+	} else if ('consts' in db) {
+		// we can assign constant names and values
+		return sk == dst.kind && t.ref && t.ref == dst.ref || sk == knd.str || sk == knd.int
 	}
-	return cmp.none
+	return false
 }
-function anyEl(t:Type):Type {
-	return t.body && 'kind' in t.body ? t.body : make(knd.any|knd.none)
+function convertTo(t:Type, dst:Type):boolean {
+	if (always(t, dst) || ((t.kind&knd.var) != 0 && (t.kind&kndVal) == 0)) return true
+	const sk = t.kind&kndVal
+	if (!sk) return false
+	const db = dst.body
+	if (!db) return (dst.kind&sk) != 0
+	if ('kind' in db) {
+		const k = sk&~knd.none
+		return (dst.kind&k) != 0 && convertibleTo(elem(t), db)
+	} else if ('alts' in db) {
+		if ((dst.kind&sk)&~knd.none) return true
+		return !!alts(dst).find(da => convertTo(t, da))
+	} else if ('params' in db) {
+		const k = sk&~knd.none
+		return !!t.body && 'params' in t.body && ((dst.kind&k) == k ||
+			((sk&knd.spec) != 0 && (dst.kind&knd.spec) != 0) ||
+			((sk&knd.obj) != 0 && (dst.kind&knd.obj) != 0)
+		) && !db.params.find(dp => {
+			const ps = (t.body as ParamBody).params
+			const f = ps.find(tp => tp.name == dp.name)
+			if (!f) return !optParam(dp)
+			return !convertibleTo(f.typ, dp.typ)
+		})
+	} else if ('consts' in db) {
+		// we can assign constant names and values
+		return sk == dst.kind && t.ref && t.ref == dst.ref || sk == knd.str || sk == knd.int
+	}
+	return false
+}
+function always(t:Type, dst:Type):boolean {
+	return t.id > 0 && t.id == dst.id ||
+		(dst.kind&knd.var) != 0 && (dst.kind&kndVal) == 0 ||
+		(dst.kind&knd.any) == knd.none && (t.kind&knd.none) != 0
+}
+function unwrapExp(t:Type, ids:number[]):Type {
+	while (t.kind&knd.exp) {
+		if (t.id > 0) ids.push(t.id)
+		t = elem(t)
+	}
+	return t
+}
+function idMatch(a:number[], b:number[]):boolean {
+	if (a.length < b.length) {
+		const t = a
+		a = b
+		b = t
+	}
+	return b.length > 0 && !!a.find(x => b.indexOf(x) >= 0)
+}
+function elem(t:Type):Type {
+	if (t.body && 'kind' in t.body) return t.body
+	const k = t.kind&knd.all
+	if (k == knd.form || k == knd.func) {
+		if (t.body && 'params' in t.body && t.body.params.length) {
+			return t.body.params.at(-1)!.typ
+		}
+	}
+	return make(knd.any)
 }
 export function alts(t:Type):Type[] {
 	if (!knd.isAlt(t.kind)) return [t]
@@ -132,4 +119,3 @@ export function alts(t:Type):Type[] {
 	}
 	return res
 }
-

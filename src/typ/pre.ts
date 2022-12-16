@@ -104,72 +104,64 @@ function toStr(t:Type, paren?:boolean):string {
 	return paren && s && s[0] != '<' ? '<' + s + '>': s
 }
 function str(b:string, t:Type, stack?:Body[]):string {
-	switch (t.kind) {
-	case knd.void:
-		return b + "<>"
-	case knd.none:
-		return b + "none"
-	case knd.all:
-		return b + "all"
-	case knd.any:
-		return b + "?"
-	case knd.ref:
-		b += "@" + t.ref
-		return b
-	case knd.sel:
-	case knd.sel|knd.none:
-		let sel = t.body
-		b += t.ref
-		if (t.kind&knd.none) b += '?'
-		return sel && 'kind' in sel && sel.kind ? str(b+'|', sel, stack) : b
-	case knd.var:
-		b += "@"
-		if (t.id>0) b += t.id
-		return b
+	if (!t.kind) return "<>"
+	let isVar = false, isNone = false, isSel = false, isAlt = false
+	let k = t.kind
+	if (k&knd.ref) {
+		k = k&~knd.ref
+	} else if (isVar = (k&knd.var) != 0) {
+		k = k&~knd.var
+	} else if (isSel = (k&knd.sel) != 0 && !!t.ref) {
+		k = k&~knd.sel
 	}
-	if (t.body && stack) {
+	if (isNone = (k&knd.none) != 0 && t.kind != knd.none && k != knd.any) {
+		k = k&~knd.none
+	}
+	let sb = ''
+	if (t.body && stack && 'params' in t.body) {
 		let idx = stack.findIndex(h => equalBody(h, t.body, []))
 		if (idx != -1) {
-			b += '............'.slice(0, stack.length - idx)
+			b += '.'.repeat(stack.length - idx)
 			if (t.kind&knd.none) b += '?'
 			return b
 		}
 	}
-	let k = t.kind&~(knd.var|knd.alt|knd.none)
-	let n = k ? knd.name(k) : ''
-	if ((t.body && 'alts' in t.body||!n) && knd.isAlt(t.kind)) {
-		b = defSuffix(b, 'alt', t)
-		if (t.ref) b += '@'+ t.ref
-		alts(t).forEach((a:Type) => {
-			b += ' '+ str('', a, stack)
-		})
-		return '<'+ b +'>'
-	}
-	b = defSuffix(b, n, t)
-	if (t.ref) b += '@'+ t.ref
-	if (t.body) {
-		let tb = t.body
-		if ('kind' in tb) {
-			if (tb == typ.void) return b
-			return str(b+'|', tb, stack)
+	if (isSel) {
+		sb = t.ref!
+		if (sb.slice(0,2) == ".0") sb = "_" + sb.slice(2)
+	} else if (k) {
+		sb = knd.name(k)
+		if (isAlt = !sb || (k&knd.alt) != 0) {
+			sb = "alt"
 		}
-		if ('params' in tb) {
+	}
+	if (isVar || t.ref && !isSel) {
+		sb += '@'
+		if (isVar && t.id > 0) sb += t.id
+		if (t.ref) sb += t.ref
+	}
+	if (isNone) sb += '?'
+	if (isAlt) {
+		alts(t).forEach((a:Type) => {
+			sb += ' '+ str('', a, stack)
+		})
+		return '<' + b + sb + '>'
+	}
+	if (t.body) {
+		const tb = t.body
+		if ('kind' in tb) {
+			if (tb.kind) return str(b + sb + '|', tb, stack)
+		} else if ('params' in tb) {
 			let hist = (stack||[]).concat(tb)
 			if (hist.length > 99) throw new Error("history")
-			tb.params.forEach(p => b += ' ' + (!p.name ? str('', p.typ, hist) :
+			tb.params.forEach(p => sb += ' ' + (!p.name ? str('', p.typ, hist) :
 				p.name + (p.typ ? ':'+ str('', p.typ, hist) : ';')
 			))
+			return '<' + b + sb + '>'
+		} else if ('consts' in tb) {
+			tb.consts.forEach(c => sb += ' ' + c.name + (!c.val ? ';' : ':'+ c.val))
+			return '<' + b + sb + '>'
 		}
-		return '<'+ b +'>'
 	}
-	return b
+	return b + sb
 }
-
-function defSuffix(b:string, n:string, t:Type):string {
-	if (n) b += n
-	if (t.id) b += '@'
-	if (t.id>0) b += t.id
-	if (has(t, knd.none)) b += '?'
-	return b
-}
-

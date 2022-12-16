@@ -10,10 +10,10 @@ export function select(t:Type, path:string):Type|null {
 
 export function selectPath(t:Type, path:Path):Type|null {
 	return path.reduce((a:Type|null, s:PathSeg):Type|null => {
-		if (a && s.sel) a = selIdx(a, 0)
+		if (a && s.sel == '/') a = selIdx(a, 0)
 		if (!a) return null
-		let res = s.key ? selKey(a, s.key) : selIdx(a, s.idx)
-		if (!res || !s.sel) return res
+		let res = s.idx != undefined ? selIdx(a, s.idx) : selKey(a, s.key||'')
+		if (!res || s.sel != '/') return res
 		return typ.listOf(res)
 	}, t)
 }

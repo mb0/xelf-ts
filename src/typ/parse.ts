@@ -3,6 +3,7 @@ import {Src, Ast, errs, ast} from '../ast'
 import {Type, ParamBody, Const} from './typ'
 import {typ} from './pre'
 import {common} from './alt'
+import {digit} from '../cor'
 
 // parseType returns a type parsed from tree a or throws a src error.
 // The normal form is <kindpath@1? [args]> where:
@@ -24,110 +25,124 @@ import {common} from './alt'
 export function parseType(a:Ast, stack?:Type[]):Type {
 	const t = ast.tok(a)
 	if (t.kind == knd.sym) {
-		return parseSym(t.raw, t.src, stack)
+		return parseSym(t.raw, t.src)
 	}
 	if (t.kind != knd.typ || !ast.isSeq(a))
 		throw errs.invalidType(a)
 	if (a.length < 3)
 		return typ.void
-	let fst = ast.tok(a[1])
+	const fst = ast.tok(a[1])
 	if (fst.kind != knd.sym)
 		throw errs.invalidType(fst)
-	let res = parseSym(fst.raw, fst.src, stack)
-	let l = typ.last(res)
-	let args = a.slice(2, -1)
-	if (typ.is(l, knd.any)) {
-		if (args.length > 0)
-			throw errs.invalidParams(a)
-		return res
-	}
+	const res = parseSym(fst.raw, fst.src)
+	const l = typ.last(res)
+	const args = a.slice(2, -1)
 	if (!args.length) return res
-	if (typ.has(l, knd.alt)) {
-		let alt = args.map(c => parseType(c, stack)).reduce(common)
+	const k = l.kind&~(knd.var|knd.ref|knd.none)
+	if (k == knd.alt) {
+		const alt = args.map(c => parseType(c, stack)).reduce(common)
 		l.kind = alt.kind | (l.kind&(knd.none|knd.var))
 		l.body = alt.body
-	} else if (typ.has(l, knd.bits | knd.enum)){
+	} else if (k == knd.obj || k == knd.func || k == knd.form || k == knd.tupl) {
+		const body:ParamBody = l.body = {params:[]}
+		const hist = (stack||[]).concat(l)
+		args.forEach(c => {
+			if (ast.tok(c).kind != knd.tag) {
+				body.params.push({typ: parseType(c, hist)})
+				return
+			}
+			const ca = c as Ast[]
+			const name = ast.tag(ca[1])
+			const pt = ca.length > 2 ? parseType(ca[2], hist) : typ.void
+			body.params.push({name, typ:pt})
+		})
+	} else if (k == knd.bits || k == knd.enum) {
 		l.body = {consts:args.map(c => {
-			let ct = ast.tok(c)
+			const ct = ast.tok(c)
 			if (ct.kind != knd.tag) {
 				if (ct.kind != knd.sym)
 					throw errs.expectSym(a)
 				return {name: ct.raw} as Const
 			}
-			let ca = c as Ast[]
-			let name = ast.tag(ca[1])
+			const ca = c as Ast[]
+			const name = ast.tag(ca[1])
 			if (ca.length < 3) return {name}
-			let cv = ast.tok(ca[2])
+			const cv = ast.tok(ca[2])
 			if (cv.kind != knd.num)
 				throw errs.unexpected(ca[2])
-			let val = parseFloat(cv.raw)
-			return {name:name, val} as Const
+			const val = parseFloat(cv.raw)
+			return {name, val} as Const
 		})}
-	} else if (typ.has(l, elkinds)) {
+	} else {
 		if (args.length > 1)
 			throw errs.invalidParams(a)
-		let hist = (stack||[]).concat(l)
-		l.body = parseType(args[0], hist)
-	} else if (typ.has(l, pakinds)) {
-		let body:ParamBody = l.body = {params:[]}
-		let hist = (stack||[]).concat(l)
-		args.forEach(c => {
-			let ct = ast.tok(c)
-			if (ct.kind != knd.tag) {
-				body.params.push({typ: parseType(c, hist)})
-				return
-			}
-			let ca = c as Ast[]
-			let name = ast.tag(ca[1])
-			let pt = typ.void
-			if (ca.length > 2) pt = parseType(ca[2], hist)
-			body.params.push({name, typ:pt})
-		})
+		l.body = parseType(args[0], (stack||[]).concat(l))
 	}
 	return res
 }
-const elkinds = (knd.exp&~knd.tupl) | knd.cont | knd.typ
-const pakinds = knd.tupl | knd.obj | knd.spec
 
-// pipe: sym ('|' sym)* // sym not empty
-// sym:  (kind|[./]path)?('@'(idx|name))?('?')?
-export function parseSym(sym:string, src?:Src, stack?:Type[]):Type {
+export function parseSym(sym:string, src?:Src):Type {
 	if (!sym) return typ.void
 	return sym.split('|').reduceRight((a:Type, s:string):Type => {
 		if (!s) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
-		let opt = s[s.length-1] == '?'
-		if (opt) {
-			if (s.length == 1) return typ.any
+		const r:Type = {kind:0, id: 0}
+		const lst = s[s.length-1]
+		const none = lst == '?'
+		const some = lst == '!'
+		if (none||some) {
 			s = s.slice(0, -1)
+			r.kind = some ? knd.some : knd.none
 		}
-		let m = s.match(/^(?:([a-z]+)|([.\/][^@?]*))?([@](?:\w[^?]*)?)?$/)
-		if (!m) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
-		let res = typ.make(0)
-		if (m[1]) { // kind
-			res.kind = parseKindName(m[1])
-			if (res.kind < 0) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
-		} else if (m[2]) {
-			res.kind = knd.sel
-			res.ref = m[2]
-			// TODO sel body res.body = a.kind>0?a:typ.void
-		}
-		if (m[3]) { // var
-			let v = m[3].slice(1)
-			if (!v || /^\d+$/.test(v)) {
-				if (!res.kind||knd.isAlt(res.kind)) res.kind |= knd.var
-				res.id = v ? parseInt(v, 10) : -1
+		const vi = s.indexOf('@')
+		if (vi >= 0) {
+			let v = s.slice(vi+1)
+			s = s.slice(0, vi)
+			if (!v || digit(v[0])) {
+				r.kind |= knd.var
+				if (v) {
+					const pi = v.search(/[.\/]/)
+					if (pi >= 0) {
+						r.ref = v.slice(pi)
+						v = v.slice(0, pi)
+					}
+				}
+				r.id = v ? parseInt(v, 10) : -1
 			} else {
-				res.ref = v
-				if (res.kind == 0) res.kind |= knd.ref
+				r.ref = v
 			}
 		}
-		if (opt) res.kind |= knd.none
-		if (a.kind <= 0) return res
-		if (res.kind&elkinds) {
-			res.body = a
-		} else if (!(res.kind&(knd.sel|knd.tupl))) {
-			throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
+		if (s != "") {
+			const fst = s[0]
+			if (fst == '.' || fst == '_' && (s.length == 1 || s[1] == '.')) {
+				if (r.ref) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
+				r.kind |= knd.sel
+				r.ref = s
+				if (fst == '_') {
+					r.ref = ".0" + s.slice(1)
+				}
+			} else {
+				const k = parseKindName(s)
+				if (k<0) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
+				r.kind |= k
+			}
 		}
-		return res
+		if (r.ref && (r.kind&(knd.all|knd.sel)) == 0) r.kind |= knd.ref
+		if (a.kind) {
+			if (!isElKind(r.kind)) throw errs.invalidType({kind:knd.sym, src:src!, raw:sym})
+			r.body = a
+		}
+		return r
 	}, typ.void)
+}
+
+function isElKind(k:number):boolean {
+	if (!(k&knd.exp)) {
+		switch (k&knd.all) {
+		case knd.cont: case knd.list: case knd.dict:
+		case knd.typ: case knd.spec:
+			return true
+		}
+		return false
+	}
+	return true
 }

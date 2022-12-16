@@ -1,6 +1,6 @@
 import {knd} from '../knd'
 import {Type, make, has, deopt, equal} from './typ'
-import {compare, cmp} from './comp'
+import {assignableTo, convertibleTo} from './comp'
 import {typ} from './pre'
 
 function isSimple(t:Type) { return !t.id && !t.body }
@@ -12,7 +12,7 @@ export function altRestrict(a:Type, t:Type):Type {
 		let alts = a.body.alts
 		if (altsHas(alts, t)) return t
 		if (!t.id) {
-			let a = alts.find(a => compare(a, t) > cmp.convert)
+			let a = alts.find(a => assignableTo(a, t))
 			if (a) return a
 		}
 	}
@@ -21,7 +21,7 @@ export function altRestrict(a:Type, t:Type):Type {
 }
 
 function altsHas(alts:Type[], t:Type):boolean {
-	return !!alts.find(t.id ? a => t.id == a.id : a => compare(t, a) > cmp.convert)
+	return !!alts.find(t.id ? a => t.id == a.id : a => assignableTo(t, a))
 }
 
 function addAlt(t:Type, res:Type, alts:Type[]):Type[] {
@@ -30,7 +30,7 @@ function addAlt(t:Type, res:Type, alts:Type[]):Type[] {
 		let tt = deopt(t)
 		let ok = altsHas(alts, tt)
 		if (!ok) {
-			alts = alts.filter(a => compare(a, tt) < cmp.convert)
+			alts = alts.filter(a => !convertibleTo(a, tt))
 			alts.push(tt)
 		}
 		res.kind |= t.kind&knd.none
@@ -48,11 +48,8 @@ function addBody(t:Type, res:Type, alts:Type[]) {
 export function common(a:Type, b:Type):Type {
 	if (!b.kind) return b
 	if (!a.kind || equal(a, b)) return a
-	let comp = compare(a, b)
-	if (comp >= cmp.same) return a
-	if (comp >= cmp.assign) return b
-	comp = compare(b, a)
-	if (comp >= cmp.assign) return a
+	if (assignableTo(a, b)) return b
+	if (assignableTo(b, a)) return a
 	let alts:Type[] = []
 	let res:Type = make(knd.void)
 	if (has(a, knd.alt)) addBody(a, res, alts)

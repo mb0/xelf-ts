@@ -79,7 +79,7 @@ function name(k:number):string {
 }
 
 function isAlt(k:number):boolean {
-	return (k&knd.alt) != 0 || count(k&knd.any) > 1
+	return (k&knd.alt) != 0 || count(k&knd.all) > 1
 }
 function count(x:number):number {
 	x = x - ((x >>> 1) & 0x55555555)

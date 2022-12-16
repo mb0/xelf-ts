@@ -90,9 +90,9 @@ const unifyTests:[string, string, Type, string][] = [
 	['@?', 'num', typ.var(1, typ.num), ''],
 	['@', 'int', typ.withID(1, typ.int), ''],
 	['@', 'num@', typ.var(1, typ.num), ''],
-	['@', 'int@', typ.withID(1, typ.int), ''],
+	['@', 'int@', typ.var(1, typ.int), ''],
 	['num@', '@', typ.var(1, typ.num), ''],
-	['int@', '@', typ.withID(1, typ.int), ''],
+	['int@', '@', typ.var(1, typ.int), ''],
 	['list|@', 'list|int', typ.listOf(typ.withID(1, typ.int)), ''],
 	['list|str', 'list|int', typ.void, 'cannot'],
 ]

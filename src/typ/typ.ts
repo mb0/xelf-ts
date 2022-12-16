@@ -33,7 +33,9 @@ export function has(t:Type, k:number) { return (t.kind&k) != 0 }
 export function deopt(t:Type):Type {
 	return !has(t, knd.none) ? t : {kind:t.kind&~knd.none, body:t.body, id:t.id, ref:t.ref}
 }
-
+export function optParam(p:Param):boolean {
+	return (p.typ.kind&knd.none) != 0 || !!p.name && p.name[p.name.length-1] == '?'
+}
 export function equal(a?:Type, b?:Type, stack?:[Body,Body][]):boolean {
 	if (!a||!b) return a == b
 	if (a.id != b.id) return false
